@@ -24,6 +24,8 @@
 #endif
 
 #define WF_OPENSSL_MIN_VERSION 0x010001000L /* minimum required version of OpenSSL to work with */
+#define WF_OPENSSL_VERSION_1_1_0 0x10100000L
+#define WF_OPENSSL_VERSION_1_1_0_F 0x1010006fL
 
 static int ssl_initialized = 0;
 static jclass byteArrayClass, stringClass;
@@ -43,10 +45,13 @@ static int SSL_app_data2_idx = -1; /* context metadata */
 static int SSL_app_data3_idx = -1; /* handshake count */
 static int SSL_CTX_app_data1_idx = -1; /* context metadata */
 
+static int OPENSSL_PROTOCOLS[6] = { SSL3_VERSION, SSL3_VERSION, TLS1_VERSION, TLS1_1_VERSION, TLS1_2_VERSION, TLS1_3_VERSION};
+
 WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstring libSSLPath);
 WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode);
 WF_OPENSSL(jobjectArray, getCiphers)(JNIEnv *e, jobject o, jlong ssl);
 WF_OPENSSL(jboolean, setCipherSuites)(JNIEnv *e, jobject o, jlong ssl, jstring ciphers);
+WF_OPENSSL(jboolean, setCipherSuitesTLS13)(JNIEnv *e, jobject o, jlong ssl, jstring ciphers);
 WF_OPENSSL(jboolean, setServerNameIndication)(JNIEnv *e, jobject o, jlong ssl, jstring ciphers);
 WF_OPENSSL(jint, freeSSLContext)(JNIEnv *e, jobject o, jlong ctx);
 WF_OPENSSL(void, setSSLContextOptions)(JNIEnv *e, jobject o, jlong ctx, jlong opt);
@@ -54,6 +59,7 @@ WF_OPENSSL(void, clearSSLContextOptions)(JNIEnv *e, jobject o, jlong ctx, jlong 
 WF_OPENSSL(void, setSSLOptions)(JNIEnv *e, jobject o, jlong ssl, jlong opt);
 WF_OPENSSL(void, clearSSLOptions)(JNIEnv *e, jobject o, jlong ssl, jlong opt);
 WF_OPENSSL(jboolean, setCipherSuite)(JNIEnv *e, jobject o, jlong ctx, jstring ciphers);
+WF_OPENSSL(jboolean, setCipherSuiteTLS13)(JNIEnv *e, jobject o, jlong ctx, jstring ciphers);
 WF_OPENSSL(jboolean, setCARevocation)(JNIEnv *e, jobject o, jlong ctx, jstring file, jstring path);
 WF_OPENSSL(jboolean, setCertificate)(JNIEnv *e, jobject o, jlong ctx, jbyteArray javaCert, jobjectArray intermediateCerts, jbyteArray javaKey, jint idx);
 WF_OPENSSL(void, setCertVerifyCallback)(JNIEnv *e, jobject o, jlong ctx, jobject verifier);
@@ -88,6 +94,7 @@ WF_OPENSSL(void, setMinProtoVersion)(JNIEnv *e, jobject o, jlong ssl, jint versi
 WF_OPENSSL(void, setMaxProtoVersion)(JNIEnv *e, jobject o, jlong ssl, jint version);
 WF_OPENSSL(jint, getMinProtoVersion)(JNIEnv *e, jobject o, jlong ssl);
 WF_OPENSSL(jint, getMaxProtoVersion)(JNIEnv *e, jobject o, jlong ssl);
+WF_OPENSSL(jboolean, getSSLSessionReused)(JNIEnv *e, jobject o, jlong ssl);
 void init_app_data_idx(void);
 void SSL_set_app_data1(SSL *ssl, tcn_ssl_conn_t *arg);
 void SSL_set_app_data2(SSL *ssl, tcn_ssl_ctxt_t *arg);
@@ -327,6 +334,8 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     GET_SSL_SYMBOL(SSL_get0_alpn_selected);
     REQUIRE_SSL_SYMBOL(SSL_CTX_set_cert_verify_callback);
     REQUIRE_SSL_SYMBOL(SSL_CTX_set_cipher_list);
+    GET_SSL_SYMBOL(SSL_set_ciphersuites);
+    GET_SSL_SYMBOL(SSL_CTX_set_ciphersuites);
     REQUIRE_SSL_SYMBOL(SSL_CTX_set_default_verify_paths);
     REQUIRE_SSL_SYMBOL(SSL_CTX_set_session_id_context);
     REQUIRE_SSL_SYMBOL(SSL_CTX_set_timeout);
@@ -336,6 +345,7 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     REQUIRE_SSL_SYMBOL(SSL_SESSION_free);
     REQUIRE_SSL_SYMBOL(SSL_SESSION_get_id);
     REQUIRE_SSL_SYMBOL(SSL_SESSION_get_time);
+    REQUIRE_SSL_SYMBOL(SSL_SESSION_set_timeout);
     REQUIRE_SSL_SYMBOL(SSL_add_file_cert_subjects_to_stack);
     REQUIRE_SSL_SYMBOL(SSL_ctrl);
     REQUIRE_SSL_SYMBOL(SSL_do_handshake);
@@ -390,6 +400,7 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     GET_SSL_SYMBOL(SSL_CTX_set_options);
     GET_SSL_SYMBOL(SSL_CTX_get_options);
     GET_SSL_SYMBOL(SSL_CTX_clear_options);
+    GET_SSL_SYMBOL(SSL_session_reused);
 
     REQUIRE_CRYPTO_SYMBOL(ASN1_INTEGER_cmp);
     REQUIRE_CRYPTO_SYMBOL(BIO_ctrl);
@@ -535,6 +546,8 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
     tcn_ssl_ctxt_t *c = NULL;
     SSL_CTX *ctx = NULL;
     jclass clazz;
+    int i;
+    int protoVersion;
 
     if (protocol == SSL_PROTOCOL_NONE) {
         throwIllegalStateException(e, "No SSL protocols requested");
@@ -571,29 +584,32 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
     c->mode     = mode;
     c->ctx      = ctx;
     set_CTX_options_internal((c->ctx), SSL_OP_ALL);
-    /* always disable SSLv2, as per RFC 6176 */
-    set_CTX_options_internal((c->ctx), SSL_OP_NO_SSLv2);
-    if (!(protocol & SSL_PROTOCOL_SSLV3))
-        set_CTX_options_internal((c->ctx), SSL_OP_NO_SSLv3);
-    if (!(protocol & SSL_PROTOCOL_TLSV1))
-        set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1);
-    if(ssl_methods.TLSv1_1_server_method != NULL) { /* we use the presence of the method to test if it is supported */
-        if (!(protocol & SSL_PROTOCOL_TLSV1_1))
-            set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1_1);
-    }
-    if(ssl_methods.TLSv1_2_server_method != NULL) {
-        if (!(protocol & SSL_PROTOCOL_TLSV1_2))
-            set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1_2);
-    }
-
-    /* We need to disable TLSv1.3 if running on OpenSSL 1.1.0+ */
-    if (ssl_methods.SSLeay() >= 0x10100000L) {
-        /* This is equivalent to this macro:
-            # define SSL_set_max_proto_version(s, version) \
-                    SSL_ctrl(s, SSL_CTRL_SET_MAX_PROTO_VERSION, version, NULL)
-            Reference: https://www.openssl.org/docs/manmaster/man3/SSL_set_max_proto_version.html
-        */
-        ssl_methods.SSL_CTX_ctrl((c->ctx), SSL_CTRL_SET_MAX_PROTO_VERSION, (TLS1_2_VERSION), NULL);
+    if (ssl_methods.SSLeay() < WF_OPENSSL_VERSION_1_1_0 || ssl_methods.SSLeay() <= WF_OPENSSL_VERSION_1_1_0_F) {
+        /* always disable SSLv2, as per RFC 6176 */
+        set_CTX_options_internal((c->ctx), SSL_OP_NO_SSLv2);
+        if (!(protocol & SSL_PROTOCOL_SSLV3))
+            set_CTX_options_internal((c->ctx), SSL_OP_NO_SSLv3);
+        if (!(protocol & SSL_PROTOCOL_TLSV1))
+            set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1);
+        if(ssl_methods.TLSv1_1_server_method != NULL) { /* we use the presence of the method to test if it is supported */
+            if (!(protocol & SSL_PROTOCOL_TLSV1_1))
+                set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1_1);
+        }
+        if(ssl_methods.TLSv1_2_server_method != NULL) {
+            if (!(protocol & SSL_PROTOCOL_TLSV1_2))
+                set_CTX_options_internal((c->ctx), SSL_OP_NO_TLSv1_2);
+        }
+    } else {
+        if (protocol != SSL_PROTOCOL_ALL) {
+            for (i = 0; i < 6; i++) {
+                if (protocol & (1 << i)) {
+                    protoVersion = OPENSSL_PROTOCOLS[i];
+                    break;
+                }
+            }
+            ssl_methods.SSL_CTX_ctrl((c->ctx), SSL_CTRL_SET_MIN_PROTO_VERSION, (protoVersion), NULL);
+            ssl_methods.SSL_CTX_ctrl((c->ctx), SSL_CTRL_SET_MAX_PROTO_VERSION, (protoVersion), NULL);
+        }
     }
 
     /*
@@ -601,62 +617,65 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
      */
     set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_DH_USE);
     set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_ECDH_USE);
-/* TODO: what do we do with these defines? */
-#ifdef SSL_OP_NO_COMPRESSION
-    /* Disable SSL compression to be safe */
-    set_CTX_options_internal((c->ctx), SSL_OP_NO_COMPRESSION);
-#endif
+    /* TODO: what do we do with these defines? */
+    #ifdef SSL_OP_NO_COMPRESSION
+        /* Disable SSL compression to be safe */
+        set_CTX_options_internal((c->ctx), SSL_OP_NO_COMPRESSION);
+    #endif
 
 
-    /** To get back the tomcat wrapper from CTX */
-    SSL_CTX_set_app_data1(ctx, c);
+        /** To get back the tomcat wrapper from CTX */
+        SSL_CTX_set_app_data1(ctx, c);
 
-#ifdef SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
-    /*
-     * Disallow a session from being resumed during a renegotiation,
-     * so that an acceptable cipher suite can be negotiated.
-     */
-    set_CTX_options_internal((c->ctx), SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
-#endif
-#ifdef SSL_MODE_RELEASE_BUFFERS
-    /* Release idle buffers to the SSL_CTX free list */
-    ssl_methods.SSL_CTX_ctrl((c->ctx),SSL_CTRL_MODE,(SSL_MODE_RELEASE_BUFFERS),NULL);
-#endif
-    setup_session_context(e, c);
-    crypto_methods.EVP_Digest((const unsigned char *)SSL_DEFAULT_VHOST_NAME,
-               (unsigned long)((sizeof SSL_DEFAULT_VHOST_NAME) - 1),
-               &(c->context_id[0]), NULL, crypto_methods.EVP_sha1(), NULL);
+    #ifdef SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
+        /*
+         * Disallow a session from being resumed during a renegotiation,
+         * so that an acceptable cipher suite can be negotiated.
+         */
+        set_CTX_options_internal((c->ctx), SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
+    #endif
+    #ifdef SSL_MODE_RELEASE_BUFFERS
+        /* Release idle buffers to the SSL_CTX free list */
+        ssl_methods.SSL_CTX_ctrl((c->ctx),SSL_CTRL_MODE,(SSL_MODE_RELEASE_BUFFERS),NULL);
+    #endif
+        /*if (mode == SSL_MODE_CLIENT) {
+            setup_client_session_context(e, c);
+        } else {*/
+        setup_session_context(e, c);
+        /*}*/
+        crypto_methods.EVP_Digest((const unsigned char *)SSL_DEFAULT_VHOST_NAME,
+                   (unsigned long)((sizeof SSL_DEFAULT_VHOST_NAME) - 1),
+                   &(c->context_id[0]), NULL, crypto_methods.EVP_sha1(), NULL);
 
-    /* Set default Certificate verification level
-     * and depth for the Client Authentication
-     */
-    c->verify_depth  = 1;
-    c->verify_mode   = SSL_CVERIFY_UNSET;
-    c->shutdown_type = SSL_SHUTDOWN_TYPE_UNSET;
+        /* Set default Certificate verification level
+         * and depth for the Client Authentication
+         */
+        c->verify_depth  = 1;
+        c->verify_mode   = SSL_CVERIFY_UNSET;
+        c->shutdown_type = SSL_SHUTDOWN_TYPE_UNSET;
 
-    /* Cache Java side SNI callback if not already cached */
-    if (ssl_context_class == NULL) {
-        ssl_context_class = (*e)->NewGlobalRef(e, o);
-        sni_java_callback = (*e)->GetStaticMethodID(e, ssl_context_class,
-                                                    "sniCallBack", "(JLjava/lang/String;)J");
-    }
+        /* Cache Java side SNI callback if not already cached */
+        if (ssl_context_class == NULL) {
+            ssl_context_class = (*e)->NewGlobalRef(e, o);
+            sni_java_callback = (*e)->GetStaticMethodID(e, ssl_context_class,
+                                                        "sniCallBack", "(JLjava/lang/String;)J");
+        }
 
-    ssl_methods.SSL_CTX_ctrl(c->ctx,SSL_CTRL_SET_ECDH_AUTO,1,NULL);
+        ssl_methods.SSL_CTX_ctrl(c->ctx,SSL_CTRL_SET_ECDH_AUTO,1,NULL);
 
-    /* Set up OpenSSL call back if SNI is provided by the client */
-    ssl_methods.SSL_CTX_callback_ctrl(c->ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_CB,(void (*)(void))ssl_callback_ServerNameIndication);
-    ssl_methods.SSL_CTX_ctrl(c->ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG,0, (void *)c);
+        /* Set up OpenSSL call back if SNI is provided by the client */
+        ssl_methods.SSL_CTX_callback_ctrl(c->ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_CB,(void (*)(void))ssl_callback_ServerNameIndication);
+        ssl_methods.SSL_CTX_ctrl(c->ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG,0, (void *)c);
 
-    /* Cache the byte[].class for performance reasons */
-    clazz = (*e)->FindClass(e, "[B");
-    byteArrayClass = (jclass) (*e)->NewGlobalRef(e, clazz);
+        /* Cache the byte[].class for performance reasons */
+        clazz = (*e)->FindClass(e, "[B");
+        byteArrayClass = (jclass) (*e)->NewGlobalRef(e, clazz);
 
-    setupDH(e, ctx);
-    return P2J(c);
-init_failed:
-    return 0;
+        setupDH(e, ctx);
+        return P2J(c);
+    init_failed:
+        return 0;
 }
-
 
 WF_OPENSSL(jobjectArray, getCiphers)(JNIEnv *e, jobject o, jlong ssl)
 {
@@ -705,15 +724,51 @@ WF_OPENSSL(jboolean, setCipherSuites)(JNIEnv *e, jobject o, jlong ssl, jstring c
     TCN_ALLOC_CSTRING(ciphers);
 
     if (ssl_ == NULL) {
+        TCN_FREE_CSTRING(ciphers);
         throwIllegalStateException(e, "ssl is null");
         return JNI_FALSE;
     }
 
     UNREFERENCED(o);
     if (!J2S(ciphers)) {
+        TCN_FREE_CSTRING(ciphers);
         return JNI_FALSE;
     }
     if (!ssl_methods.SSL_set_cipher_list(ssl_, J2S(ciphers))) {
+        char err[2048];
+        generate_openssl_stack_error(e, err, sizeof(err));
+        throwIllegalStateException(e, err);
+        rv = JNI_FALSE;
+    }
+    TCN_FREE_CSTRING(ciphers);
+    return rv;
+}
+
+WF_OPENSSL(jboolean, setCipherSuitesTLS13)(JNIEnv *e, jobject o, jlong ssl, jstring ciphers)
+{
+#pragma comment(linker, "/EXPORT:"__FUNCTION__"="__FUNCDNAME__)
+    jboolean rv = JNI_TRUE;
+    SSL *ssl_ = J2P(ssl, SSL *);
+    TCN_ALLOC_CSTRING(ciphers);
+
+    if (ssl_methods.SSL_set_ciphersuites == NULL) {
+        TCN_FREE_CSTRING(ciphers);
+        throwIllegalStateException(e, "OpenSSL version does not support method SSL_set_ciphersuites");
+        return JNI_FALSE;
+    }
+
+    if (ssl_ == NULL) {
+        TCN_FREE_CSTRING(ciphers);
+        throwIllegalStateException(e, "ssl is null");
+        return JNI_FALSE;
+    }
+
+    UNREFERENCED(o);
+    if (!J2S(ciphers)) {
+        TCN_FREE_CSTRING(ciphers);
+        return JNI_FALSE;
+    }
+    if (!ssl_methods.SSL_set_ciphersuites(ssl_, J2S(ciphers))) {
         char err[2048];
         generate_openssl_stack_error(e, err, sizeof(err));
         throwIllegalStateException(e, err);
@@ -860,6 +915,36 @@ WF_OPENSSL(jboolean, setCipherSuite)(JNIEnv *e, jobject o, jlong ctx, jstring ci
 #ifndef HAVE_EXPORT_CIPHERS
     free(buf);
 #endif
+    TCN_FREE_CSTRING(ciphers);
+    return rv;
+}
+
+WF_OPENSSL(jboolean, setCipherSuiteTLS13)(JNIEnv *e, jobject o, jlong ctx, jstring ciphers)
+{
+#pragma comment(linker, "/EXPORT:"__FUNCTION__"="__FUNCDNAME__)
+    tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
+    TCN_ALLOC_CSTRING(ciphers);
+    jboolean rv = JNI_TRUE;
+
+    if (ssl_methods.SSL_CTX_set_ciphersuites == NULL) {
+        TCN_FREE_CSTRING(ciphers);
+        throwIllegalStateException(e, "OpenSSL version does not support method SSL_CTX_set_ciphersuites");
+        return JNI_FALSE;
+    }
+
+    UNREFERENCED(o);
+    TCN_ASSERT(ctx != 0);
+    if (!J2S(ciphers)) {
+        TCN_FREE_CSTRING(ciphers);
+        return JNI_FALSE;
+    }
+
+    if (!ssl_methods.SSL_CTX_set_ciphersuites(c->ctx, J2S(ciphers))) {
+        char err[2048];
+        generate_openssl_stack_error(e, err, sizeof(err));
+        tcn_Throw(e, "Unable to configure permitted SSL ciphers (%s)", err);
+        rv = JNI_FALSE;
+    }
     TCN_FREE_CSTRING(ciphers);
     return rv;
 }
@@ -1632,6 +1717,24 @@ WF_OPENSSL(jint, getMaxProtoVersion)(JNIEnv *e, jobject o, jlong ssl)
 
     UNREFERENCED_STDARGS;
     return ssl_methods.SSL_ctrl(c, SSL_CTRL_GET_MAX_PROTO_VERSION, 0, NULL);
+}
+
+WF_OPENSSL(jboolean, getSSLSessionReused)(JNIEnv *e, jobject o, jlong ssl)
+{
+#pragma comment(linker, "/EXPORT:"__FUNCTION__"="__FUNCDNAME__)
+    SSL *c = J2P(ssl, SSL *);
+    int res;
+    UNREFERENCED(o);
+
+    if (ssl_methods.SSL_session_reused == NULL) {
+        throwIllegalStateException(e, "OpenSSL version does not support method SSL_session_reused");
+        return JNI_FALSE;
+    }
+    res = ssl_methods.SSL_session_reused(c);
+    if (res == 1) {
+        return JNI_TRUE;
+    }
+    return JNI_FALSE;
 }
 
 
