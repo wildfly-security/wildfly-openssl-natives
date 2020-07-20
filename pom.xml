@@ -26,7 +26,7 @@
     </parent>
 
     <groupId>org.wildfly.openssl</groupId>
-    <artifactId>wildfly-openssl-parent</artifactId>
+    <artifactId>wildfly-openssl-natives-parent</artifactId>
     <version>2.0.0.Alpha1-SNAPSHOT</version>
 
     <packaging>pom</packaging>
@@ -35,15 +35,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <version.org.wildfly.checkstyle>1.0.8.Final</version.org.wildfly.checkstyle>
 
-        <openssl.path></openssl.path>
         <cmake.generator>Unix Makefiles</cmake.generator>
         <make.exe>make</make.exe>
-
-        <!-- Test properties -->
-        <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
-        <org.wildfly.openssl.test.host>localhost</org.wildfly.openssl.test.host>
-        <org.wildfly.openssl.test.port>7676</org.wildfly.openssl.test.port>
-        <org.wildfly.openssl.test.secondary.port>7686</org.wildfly.openssl.test.secondary.port>
     </properties>
 
     <licenses>
@@ -54,16 +47,6 @@
         </license>
     </licenses>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>4.8.2</version>
-                <scope>test</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
     <build>
         <plugins>
             <plugin>
@@ -77,18 +60,6 @@
     </build>
 
     <profiles>
-        <profile>
-            <id>default-build</id>
-            <activation>
-                <property>
-                    <name>!parent-release</name>
-                </property>
-            </activation>
-            <modules>
-                <module>java</module>
-                <module>combined</module>
-            </modules>
-        </profile>
         <profile>
             <id>parent-release</id>
             <activation>
