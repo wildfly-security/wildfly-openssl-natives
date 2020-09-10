@@ -547,7 +547,7 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
     SSL_CTX *ctx = NULL;
     jclass clazz;
     int i;
-    int protoVersion;
+    int protoVersion = 0;
 
     if (protocol == SSL_PROTOCOL_NONE) {
         throwIllegalStateException(e, "No SSL protocols requested");
