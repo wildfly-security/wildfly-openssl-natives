@@ -102,7 +102,7 @@ void *SSL_get_app_data3(const SSL *ssl);
 void SSL_set_app_data3(SSL *ssl, void *arg);
 void SSL_CTX_set_app_data1(SSL_CTX *ssl, void *arg);
 void SSL_BIO_close(BIO *bi);
-int ssl_callback_ServerNameIndication(SSL *ssl, int *al, tcn_ssl_ctxt_t *c);
+int ssl_callback_ServerNameIndication(SSL *ssl, int *al, SSL_CTX *c);
 int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const char * libSSLPath);
 void setupDH(JNIEnv *e, SSL_CTX * ctx);
 
@@ -176,7 +176,7 @@ void SSL_BIO_close(BIO *bi)
 /* Callback used when OpenSSL receives a client hello with a Server Name
  * Indication extension.
  */
-int ssl_callback_ServerNameIndication(SSL *ssl, int *al, tcn_ssl_ctxt_t *c)
+int ssl_callback_ServerNameIndication(SSL *ssl, int *al, SSL_CTX *c)
 {
     /* TODO: Is it better to cache the JNIEnv* during the call to handshake? */
 
@@ -193,7 +193,7 @@ int ssl_callback_ServerNameIndication(SSL *ssl, int *al, tcn_ssl_ctxt_t *c)
 
     /*  Convert parameters ready for the method call */
     hostname = (*env)->NewStringUTF(env, servername);
-    original_ssl_context = P2J(c->ctx);
+    original_ssl_context = P2J(c);
 
     /*  Make the call */
     new_ssl_context = (*env)->CallStaticLongMethod(env,
@@ -203,7 +203,8 @@ int ssl_callback_ServerNameIndication(SSL *ssl, int *al, tcn_ssl_ctxt_t *c)
                                                             hostname);
 
     if (original_ssl_context != new_ssl_context) {
-        ssl_methods.SSL_set_SSL_CTX(ssl, J2P(new_ssl_context, SSL_CTX *));
+        tcn_ssl_ctxt_t *nc = J2P(new_ssl_context, tcn_ssl_ctxt_t *);
+        ssl_methods.SSL_set_SSL_CTX(ssl, (SSL_CTX *) nc->ctx);
     }
 
     return SSL_TLSEXT_ERR_OK;
