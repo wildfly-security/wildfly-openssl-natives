@@ -90,6 +90,7 @@
             </activation>
             <modules>
                 <module>macosx-x86_64</module>
+                <module>macosx-aarch64</module>
             </modules>
         </profile>
         <profile>
