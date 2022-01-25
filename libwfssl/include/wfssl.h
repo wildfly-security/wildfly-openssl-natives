@@ -193,7 +193,9 @@ typedef  unsigned __int64   uint64_t;
 
 #define TLSEXT_NAMETYPE_host_name 0
 
-#define SSL_OP_ALL                                      0x80000BFFL
+#define SSL_OP_ALL_0_9_7                                0x80000BFFU
+#define SSL_OP_ALL_1_1_0_F                              0x80000854U
+#define SSL_OP_ALL_3_0_0                                0x80000850U
 #define SSL_OP_NO_SSLv2                                 0x01000000L
 #define SSL_OP_NO_SSLv3                                 0x02000000L
 #define SSL_OP_NO_TLSv1                                 0x04000000L
