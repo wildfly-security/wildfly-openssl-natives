@@ -27,7 +27,7 @@
 
     <groupId>org.wildfly.openssl</groupId>
     <artifactId>wildfly-openssl-natives-parent</artifactId>
-    <version>2.1.0.SP01</version>
+    <version>2.2.1.CR1-SNAPSHOT</version>
 
     <packaging>pom</packaging>
 
@@ -42,7 +42,7 @@
 
     <licenses>
         <license>
-            <name>Apache License Version 2.0</name>
+            <name>Apache License 2.0</name>
             <url>http://repository.jboss.org/licenses/apache-2.0.txt</url>
             <distribution>repo</distribution>
         </license>
@@ -90,6 +90,7 @@
             </activation>
             <modules>
                 <module>macosx-x86_64</module>
+                <module>macosx-aarch64</module>
             </modules>
         </profile>
         <profile>

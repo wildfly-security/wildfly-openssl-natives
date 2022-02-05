@@ -26,6 +26,7 @@
 #define WF_OPENSSL_MIN_VERSION 0x010001000L /* minimum required version of OpenSSL to work with */
 #define WF_OPENSSL_VERSION_1_1_0 0x10100000L
 #define WF_OPENSSL_VERSION_1_1_0_F 0x1010006fL
+#define WF_OPENSSL_VERSION_3_0_0 0x30000000L
 
 static int ssl_initialized = 0;
 static jclass byteArrayClass, stringClass;
@@ -354,7 +355,12 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     REQUIRE_SSL_SYMBOL(SSL_get_ciphers);
     REQUIRE_SSL_SYMBOL(SSL_get_current_cipher);
     REQUIRE_SSL_SYMBOL(SSL_get_peer_cert_chain);
-    REQUIRE_SSL_SYMBOL(SSL_get_peer_certificate);
+
+    GET_SSL_SYMBOL(SSL_get_peer_certificate);
+    if(ssl_methods.SSL_get_peer_certificate == NULL) {
+        REQUIRE_SSL_SYMBOL_ALIAS(SSL_get1_peer_certificate, SSL_get_peer_certificate);
+    }
+
     REQUIRE_SSL_SYMBOL(SSL_get_privatekey);
     REQUIRE_SSL_SYMBOL(SSL_get_servername);
     REQUIRE_SSL_SYMBOL(SSL_get_session);
@@ -428,7 +434,12 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     GET_CRYPTO_SYMBOL(ERR_load_crypto_strings);
     GET_CRYPTO_SYMBOL(OPENSSL_add_all_algorithms_noconf);
     REQUIRE_CRYPTO_SYMBOL(EVP_Digest);
-    REQUIRE_CRYPTO_SYMBOL(EVP_PKEY_bits);
+
+    GET_CRYPTO_SYMBOL(EVP_PKEY_bits);
+    if (crypto_methods.EVP_PKEY_bits == NULL) {
+      REQUIRE_CRYPTO_SYMBOL_ALIAS(EVP_PKEY_get_bits, EVP_PKEY_bits);
+    }
+
     REQUIRE_CRYPTO_SYMBOL(EVP_PKEY_free);
     REQUIRE_CRYPTO_SYMBOL(EVP_PKEY_type);
     REQUIRE_CRYPTO_SYMBOL(EVP_sha1);
@@ -584,7 +595,13 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
     c->protocol = protocol;
     c->mode     = mode;
     c->ctx      = ctx;
-    set_CTX_options_internal((c->ctx), SSL_OP_ALL);
+    if (ssl_methods.SSLeay() >= WF_OPENSSL_VERSION_3_0_0) {
+        set_CTX_options_internal(c->ctx, SSL_OP_ALL_3_0_0);
+    } else if (ssl_methods.SSLeay() >= WF_OPENSSL_VERSION_1_1_0_F) {
+        set_CTX_options_internal(c->ctx, SSL_OP_ALL_1_1_0_F);
+    } else {
+        set_CTX_options_internal(c->ctx, SSL_OP_ALL_0_9_7);
+    }
     if (ssl_methods.SSLeay() < WF_OPENSSL_VERSION_1_1_0 || ssl_methods.SSLeay() <= WF_OPENSSL_VERSION_1_1_0_F) {
         /* always disable SSLv2, as per RFC 6176 */
         set_CTX_options_internal((c->ctx), SSL_OP_NO_SSLv2);
@@ -616,8 +633,10 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
     /*
      * Configure additional context ingredients
      */
-    set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_DH_USE);
-    set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_ECDH_USE);
+    if (ssl_methods.SSLeay() < WF_OPENSSL_VERSION_1_1_0) {
+        set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_DH_USE);
+        set_CTX_options_internal((c->ctx), SSL_OP_SINGLE_ECDH_USE);
+    }
     /* TODO: what do we do with these defines? */
     #ifdef SSL_OP_NO_COMPRESSION
         /* Disable SSL compression to be safe */
