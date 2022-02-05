@@ -838,6 +838,11 @@ WF_OPENSSL(jint, freeSSLContext)(JNIEnv *e, jobject o, jlong ctx)
             c->next_proto_data = NULL;
         }
         c->next_proto_len = 0;
+
+        if (c->session_context) {
+            (*e)->DeleteGlobalRef(e, c->session_context);
+            c->session_context = NULL;
+        }
     }
     return 0;
 }
