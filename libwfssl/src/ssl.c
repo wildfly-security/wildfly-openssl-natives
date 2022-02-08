@@ -231,6 +231,18 @@ int ssl_callback_ServerNameIndication(SSL *ssl, int *al, tcn_ssl_ctxt_t *c)
 #define REQUIRE_SSL_SYMBOL(symb) REQUIRE_SSL_SYMBOL_ALIAS(symb, symb);
 #define REQUIRE_CRYPTO_SYMBOL(symb) REQUIRE_CRYPTO_SYMBOL_ALIAS(symb, symb);
 
+/*
+ * https://issues.redhat.com/projects/SSLNTV/issues/SSLNTV-17
+ *
+ * The GNU C library 2.34 has merged the functionality of libdl into the libc, and introducing new symbol versions for
+ * dlopen/dlerror/dlsym. To keep backwards compatibility, use the 2.2.5 version of the symbols.
+ */
+#ifdef __GLIBC__
+__asm__(".symver dlopen,dlopen@GLIBC_2.2.5");
+__asm__(".symver dlerror,dlerror@GLIBC_2.2.5");
+__asm__(".symver dlsym,dlsym@GLIBC_2.2.5");
+#endif
+
 int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const char * libSSLPath) {
 
 #ifdef WIN32
