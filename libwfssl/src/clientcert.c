@@ -111,15 +111,6 @@ WF_OPENSSL(void, setSSLVerify)(JNIEnv *e, jobject o, jlong ssl, jint level, jint
     if ((c->verify_mode == SSL_CVERIFY_OPTIONAL) ||
         (c->verify_mode == SSL_CVERIFY_OPTIONAL_NO_CA))
         verify |= SSL_VERIFY_PEER;
-    if (!c->store) {
-        if (ssl_methods.SSL_CTX_set_default_verify_paths(c->ctx)) {
-            c->store = ssl_methods.SSL_CTX_get_cert_store(c->ctx);
-            crypto_methods.X509_STORE_set_flags(c->store, 0);
-        }
-        else {
-            /* XXX: See if this is fatal */
-        }
-    }
 
     ssl_methods.SSL_set_verify(ssl_, verify, SSL_callback_SSL_verify);
 }

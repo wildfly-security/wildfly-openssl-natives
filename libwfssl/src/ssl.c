@@ -690,6 +690,16 @@ WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode
         clazz = (*e)->FindClass(e, "[B");
         byteArrayClass = (jclass) (*e)->NewGlobalRef(e, clazz);
 
+        /* The store is also initialized with the SSL context cos doing it in
+         * setSSLVerify as before can trigger a crash if multi-threading
+         */
+        if (ssl_methods.SSL_CTX_set_default_verify_paths(c->ctx)) {
+            c->store = ssl_methods.SSL_CTX_get_cert_store(c->ctx);
+            crypto_methods.X509_STORE_set_flags(c->store, 0);
+        } else {
+            /* XXX: See if this is fatal */
+        }
+
         setupDH(e, ctx);
         return P2J(c);
     init_failed:
