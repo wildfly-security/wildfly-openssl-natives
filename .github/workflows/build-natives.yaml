@@ -2,7 +2,7 @@ name: Build Natives
 on:
   pull_request:
     branches:
-      - master
+      - main
   push:
     tags:
       - '*'
@@ -14,8 +14,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
-        - os: windows-latest
-          vcvars: C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat
+          - os: windows-latest
+            vcvars: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat
     steps:
       - uses: actions/checkout@v2
       - name: Set up JDK 11
@@ -36,17 +36,21 @@ jobs:
       - if: matrix.os == 'windows-latest'
         name: Install Full OpenSSL Library
         run: |
-          choco install --no-progress openssl
+          vcpkg install openssl:x64-windows
       - if: matrix.os != 'windows-latest'
         name: Build with Maven
-        run: mvn -B package --file pom.xml
+        run: |
+          openssl version -v
+          mvn -B package --file pom.xml
       - if: matrix.os == 'windows-latest'
         name: Build with Microsoft Visual Studio native tools command prompt and Maven
         env:
           VCVARS: ${{ matrix.vcvars }}
         shell: cmd
         run: |
-          call "%VCVARS%"
+          call "%VCVARS%" x64          
+          set PATH=C:\vcpkg\installed\x64-windows\tools\openssl;%PATH%
+          openssl version -v
           mvn -B package --file pom.xml
       - if: ${{ github.event_name == 'push' }}
         name: Archive the built native artifacts if this is a tag
