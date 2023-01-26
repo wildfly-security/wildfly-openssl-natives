@@ -15,7 +15,7 @@ jobs:
         working-directory: main
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, ubuntu-latest]
         include:
           - os: windows-latest
             vcvars: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat
@@ -75,6 +75,38 @@ jobs:
           for /f "tokens=3 delims=<> skip=1" %%v in ('findstr "<version>" ..\main\pom.xml') do set WILDFLY_OPENSSL_NATIVES_VERSION=%%v
           echo Running tests with WildFly OpenSSL Natives %WILDFLY_OPENSSL_NATIVES_VERSION%
           mvn -B verify --file pom.xml -Dorg.wildfly.openssl.path="C:\vcpkg\installed\x64-windows\bin" -Dversion.org.wildfly.openssl.natives=%WILDFLY_OPENSSL_NATIVES_VERSION%
+      - if: matrix.os == 'ubuntu-latest'
+        name: Install latest version of OpenSSL in Ubuntu
+        run: |
+          cd /usr/local/src/
+          sudo wget https://www.openssl.org/source/openssl-3.1.2.tar.gz
+          sudo tar -xf openssl-3.0.7.tar.gz
+          cd openssl-3.0.7
+          sudo ./config --prefix=/usr/local/ssl --openssldir=/usr/local/ssl shared zlib
+          sudo make
+          sudo make test
+          sudo make install
+          cd /etc/ld.so.conf.d/
+          echo "/usr/local/ssl/lib64" | sudo tee openssl-3.1.2.conf
+          sudo ldconfig -v
+      - if: matrix.os == 'ubuntu-latest'
+        name: Build WildFly OpenSSL natives on Ubuntu with OpenSSL 3
+        id: build-wildfly-openssl-natives-on-ubuntu
+        run: |
+          export PATH=/usr/local/ssl/bin:$PATH
+          echo "OpenSSL version used is:"
+          openssl version 
+          mvn -B install --file pom.xml
+          echo "WILDFLY_OPENSSL_NATIVES_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+      - if: matrix.os == 'ubuntu-latest'
+        name: Run tests with the built Linux native
+        working-directory: wildfly-openssl
+        run: |
+          export PATH=/usr/local/ssl/bin:$PATH
+          openssl version
+          export WILDFLY_OPENSSL_NATIVES_VERSION=${{ steps.build-wildfly-openssl-natives-on-ubuntu.outputs.WILDFLY_OPENSSL_NATIVES_VERSION }}
+          echo Running tests with WildFly OpenSSL Natives $WILDFLY_OPENSSL_NATIVES_VERSION
+          mvn -B verify --file pom.xml -Dorg.wildfly.openssl.path="/usr/local/src/openssl-3.1.2" -Dversion.org.wildfly.openssl.natives=$WILDFLY_OPENSSL_NATIVES_VERSION
       - if: ${{ github.event_name == 'push' }}
         name: Archive the built native artifacts if this is a tag
         uses: actions/upload-artifact@v2
