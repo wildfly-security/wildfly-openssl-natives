@@ -48,7 +48,7 @@ jobs:
       - if: matrix.os == 'windows-latest'
         name: Install Full OpenSSL Library
         run: |
-          vcpkg install openssl:x64-windows
+          vcpkg install openssl[core,tools] --triplet x64-windows
       - if: matrix.os == 'macos-latest'
         name: Build WildFly OpenSSL natives
         id: build-wildfly-openssl-natives
