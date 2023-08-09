@@ -41,16 +41,16 @@ jobs:
       - name: Maven Version Info
         run: mvn -version
       - if: matrix.os == 'macos-latest'
-        name: OpenSSL Library Version Info
+        name: OpenSSL Library Version Info on MacOS
         run: |
           export PATH="/usr/local/opt/openssl@3/bin:$PATH"
           openssl version
       - if: matrix.os == 'windows-latest'
-        name: Install Full OpenSSL Library
+        name: Install OpenSSL Library on Windows
         run: |
-          vcpkg install openssl:x64-windows
+          vcpkg install openssl[core,tools] --triplet x64-windows
       - if: matrix.os == 'macos-latest'
-        name: Build WildFly OpenSSL natives
+        name: Build WildFly OpenSSL natives on MacOS
         id: build-wildfly-openssl-natives
         run: |
           export PATH="/usr/local/opt/openssl@3/bin:$PATH"
@@ -59,7 +59,7 @@ jobs:
           mvn -B install --file pom.xml
           echo "WILDFLY_OPENSSL_NATIVES_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
       - if: matrix.os == 'windows-latest'
-        name: Build with Microsoft Visual Studio native tools command prompt and Maven
+        name: Build WildFly OpenSSL natives on Windows with Microsoft Visual Studio native tools command prompt and Maven on Windows
         env:
           VCVARS: ${{ matrix.vcvars }}
         shell: cmd
