@@ -74,7 +74,7 @@ jobs:
           openssl version -v
           for /f "tokens=3 delims=<> skip=1" %%v in ('findstr "<version>" ..\main\pom.xml') do set WILDFLY_OPENSSL_NATIVES_VERSION=%%v
           echo Running tests with WildFly OpenSSL Natives %WILDFLY_OPENSSL_NATIVES_VERSION%
-          mvn -B verify --file pom.xml -Dorg.wildfly.openssl.path="C:\vcpkg\installed\x64-windows\tools\openssl" -Dversion.org.wildfly.openssl.natives=%WILDFLY_OPENSSL_NATIVES_VERSION%
+          mvn -B verify --file pom.xml -Dorg.wildfly.openssl.path="C:\vcpkg\installed\x64-windows\bin" -Dversion.org.wildfly.openssl.natives=%WILDFLY_OPENSSL_NATIVES_VERSION%
       - if: ${{ github.event_name == 'push' }}
         name: Archive the built native artifacts if this is a tag
         uses: actions/upload-artifact@v2
