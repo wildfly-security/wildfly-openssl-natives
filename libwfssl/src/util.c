@@ -173,7 +173,7 @@ jint tcn_get_java_env(JNIEnv **env)
 }
 
 
-JavaVM * tcn_get_java_vm()
+JavaVM * tcn_get_java_vm(void)
 {
     return tcn_global_vm;
 }
