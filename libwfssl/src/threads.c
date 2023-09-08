@@ -151,7 +151,7 @@ static void ssl_dyn_destroy_function(struct CRYPTO_dynlock_value *l,
     free(l);
 #endif
 }
-void ssl_thread_setup()
+void ssl_thread_setup(void)
 {
     int i;
     if(crypto_methods.CRYPTO_num_locks == NULL) {
