@@ -106,6 +106,18 @@
             </modules>
         </profile>
         <profile>
+            <id>linux-loongarch64</id>
+            <activation>
+                <os>
+                    <family>linux</family>
+                    <arch>loongarch64</arch>
+                </os>
+            </activation>
+            <modules>
+                <module>linux-loongarch64</module>
+            </modules>
+        </profile>
+        <profile>
             <id>linux-ppc64le</id>
             <activation>
                 <os>
