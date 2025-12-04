@@ -22,13 +22,13 @@
     <parent>
         <groupId>org.wildfly.openssl</groupId>
         <artifactId>wildfly-openssl-natives-build</artifactId>
-        <version>2.3.0.Alpha3-SNAPSHOT</version>
+        <version>2.3.0.Alpha3</version>
         <relativePath>../</relativePath>
     </parent>
 
     <groupId>org.wildfly.openssl</groupId>
     <artifactId>wildfly-openssl-natives-build-solaris-sparcv9</artifactId>
-    <version>2.3.0.Alpha3-SNAPSHOT</version>
+    <version>2.3.0.Alpha3</version>
 
     <packaging>jar</packaging>
 
