@@ -20,6 +20,8 @@
 
     <packaging>pom</packaging>
 
+    <name>WildFly OpenSSL Natives - ${project.artifactId}</name>
+
     <build>
         <pluginManagement>
             <plugins>
