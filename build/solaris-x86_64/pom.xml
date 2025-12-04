@@ -30,12 +30,14 @@
     <artifactId>wildfly-openssl-natives-build-solaris-x86_64</artifactId>
     <version>2.3.0.Alpha3-SNAPSHOT</version>
 
+    <packaging>jar</packaging>
+
+    <name>WildFly OpenSSL Natives - ${project.artifactId}</name>
+
     <properties>
       <jdk.min.version>1.8</jdk.min.version>
       <make.executable>gmake</make.executable>
     </properties>
-
-    <packaging>jar</packaging>
 
     <build>
         <plugins>

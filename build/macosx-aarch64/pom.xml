@@ -32,6 +32,8 @@
 
     <packaging>jar</packaging>
 
+    <name>WildFly OpenSSL Natives - ${project.artifactId}</name>
+
     <build>
         <plugins>
             <plugin>
