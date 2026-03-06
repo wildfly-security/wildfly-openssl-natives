@@ -78,7 +78,7 @@ The library is built in two mandatory steps
 2) `mvn install`
 
 * If you omit the first invocation with `-Dnative-build`, only parent will be installed
-* If you add clean to second invocation, some new tests (since 2.3) tests which run against not installed library will fail
+* If you add clean to second invocation, some new tests (since 2.3), which run against not installed library will fail
 * If you execute only first invocation, the wildfly-openssl-all will be skipped. See [pom.xml](blob/main/pom.xml) for more details
 
 ### Windows
