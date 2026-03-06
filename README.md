@@ -73,8 +73,13 @@ The SSLContext can then be used as normal, and should provide a drop in replacem
 Building
 ========
 
-The java side of the project uses maven and can be build as normal (`mvn install`). The native code should be build
-as part of the standard build process.
+The library is built in two mandatory steps
+1) `mvn clean install -Dnative-build`
+2) `mvn install`
+
+* If you omit the first invocation with `-Dnative-build`, only parent will be installed
+* If you add clean to second invocation, some new tests (since 2.3) tests which run against not installed library will fail
+* If you execute only first invocation, the wildfly-openssl-all will be skipped. See [pom.xml](blob/main/pom.xml) for more details
 
 ### Windows
 
