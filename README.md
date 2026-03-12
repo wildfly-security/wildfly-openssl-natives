@@ -1,93 +1,62 @@
-OpenSSL Bindings for Java
-=========================
+# WildFly OpenSSL - Natives
 
-This project provides OpenSSL bindings for Java. As much as possible they attempt to use existing JSSE API's, so the
+
+The WildFly OpenSSL project provides OpenSSL bindings for Java. As much as possible they attempt to use existing JSSE API's, so the
 SSLContext should be usable as a drop in replacement for applications that are currently using JSSE.
+
+The WildFly OpenSSL project was originally contained within a single project, however the project team started to notice that a lot
+of the fixes were contained in the Java code only whilst the release process needed new native binaries for each release. Due to
+different architectures and environments needed for the natives the native release process is more involved so this project was
+split out so we could release the natives only when really needed.
 
 This code was originally based on the Tomcat Native code, however it has been fairly extensively modified to more closely
 align with JSSE and to support dynamic linking.
 
-Usage
-=====
+## Usage
 
-Maven artifact
---------------
+This project is not intended to be directly consumed, artifacts in this repository can change without warning, users should
+refer to the WildFly OpenSSL project for usage information.
 
-There are two Maven artifacts to choose between, which one you use will depend on your use case:
+## Building
 
+The project is structured into a two stage build process to facilitate us being able to aggregate multiple native builds together
+and push to Nexus as a single step.
 
-        <dependency>
-            <groupId>org.wildfly.openssl</groupId>
-            <artifactId>wildfly-openssl-java</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        
-        <dependency>
-            <groupId>org.wildfly.openssl</groupId>
-            <artifactId>wildfly-openssl</artifactId>
-            <version>${project.version}</version>
-        </dependency>
+The first step is to trigger the native build according to the environment you are running the build on.
 
-The `wildfly-openssl-java` artifact does not contain any native code. To use it you will need to either place the native library
-somewhere that it can be found by `System.loadLibrary`, or include a maven artifact that has the library packaged (such as one of
-the platform specific artifacts built by this project).
+ * `mvn clean install -Dnative-build`
 
-The `wildfly-openssl` artifact contains binaries for Mac, Linux and Windows (all for x86_64). If no other version of these
- native libraries is found then these will be extracted to a temporary directory and loaded. This should allow it to run without
- having to worry about how to deal with the native code.
+This triggers the `package` module in the project which performs a native build after detecting the environment. The resulting native
+library is then copied to the `target` directory at the root of the project.
 
+The second stage is:
 
-Registering the provider
-------------------------
+ * `mvn install`
 
-These bindings are implemented as a security provider. By default the provider will not be installed, so the easiest way
-to install the provider is to call `org.wildfly.openssl.OpenSSLProvider.register()`.
+This now uses the native libraries in the root `target` directory and performs the remainder of the build to assemble these into
+maven artifacts that WildFly OpenSSL can depend upon.
 
-Note that at the moment this project does not provide signed jars (this may change in the future). If you wish to register
-this as a default provider you will need to sign the jar yourself.
+To create a build for multiple architectures / environments you should run the `-Dnative-build` step on each of those environments
+and copy the resulting binaries to the `target` directory of your local wildfly-openssl-natives checkout, when you run `mvn install`
+these will then all be aggregated into the final build.
 
-Installing the native library
------------------------------
+ - _If you omit the first invocation with `-Dnative-build`, only parent will be installed_
+ - _If you add clean to second invocation, some new tests (since 2.3), which run against not installed library will fail_
+ - _If you execute only first invocation, the wildfly-openssl-all will be skipped. See [pom.xml](blob/main/pom.xml) for more details_
 
-If you are running on x86_64 Mac, Windows or Linux then you can use the out of the box support provided by the `wildfly-openssl`
-artifact.
+### Environments
 
-There are two different native libraries that must be loaded, the `libwfssl` binary provided by this project, and OpenSSL
-itself. `libwfssl` is loaded through a standard java.lang.System.loadLibrary() invocation, so should be located somewhere
-where it can be discovered by the JVM. Alternatively you can specify the `org.wildfly.openssl.libwfssl.path` system property
-to specify the full path to the `libwfssl` library.
+Presently the development of WildFly OpenSSL including the natives project predominantly occurs on Fedora Linux laptops, the
+release process then uses GitHub actions and other CI infrastructure for the actual release.  The following set up information
+was prepared for earlier iterations of this project so should be used with caution.
 
-OpenSSL is loaded dynamically, and its location can be specified by the `org.wildfly.openssl.path` system property. If
-this property is not present the standard system library search path with be used instead. Because the library is loaded
-dynamically it should be possible to use different versions of OpenSSL without needed to recompile.
-
-Using the provider
-------------------
-
-After the provider has been registered all that is necessary to use it to get the SSLContext:
-
-    SSLContext sslContext =  SSLContext.getInstance("openssl.TLS");
-
-The SSLContext can then be used as normal, and should provide a drop in replacement for JSSE.
-
-Building
-========
-
-The library is built in two mandatory steps
-1) `mvn clean install -Dnative-build`
-2) `mvn install`
-
-* If you omit the first invocation with `-Dnative-build`, only parent will be installed
-* If you add clean to second invocation, some new tests (since 2.3), which run against not installed library will fail
-* If you execute only first invocation, the wildfly-openssl-all will be skipped. See [pom.xml](blob/main/pom.xml) for more details
-
-### Windows
+#### Windows
 
 To do the Windows build you need to run the build from a visual studio native tools command prompt. If you want to build
 the 32 bit natives you must use the 32 bit prompt (and have JAVA_HOME pointed to a 32 bit JVM), otherwise both the prompt
 and the JVM must be 64 bit.
 
-#### Configuring Your Environment
+##### Configuring Your Environment
 
 1. Visit the [OpenSSL Wiki](https://wiki.openssl.org/index.php/Binaries) and choose where to download OpenSSL
    from.
@@ -95,7 +64,7 @@ and the JVM must be 64 bit.
         * When prompted install the executables in the `C:\OpenSSL-32\bin` and `C:\OpenSSL-64\bin` directories
           respectively.
     * _Optional:_ Configure a `OPENSSL_32` and `OPENSSL_64` permanent environment variable.
-    
+
 1. Next ensure you have both a 32 and 64 bit JDK installed.
     * You can download OpenJDK from [Red Hat](https://developers.redhat.com/products/openjdk/download)
     * It seems to be easiest to download the zips.
@@ -103,11 +72,11 @@ and the JVM must be 64 bit.
 
 1. Download and install [Visual Studio](https://visualstudio.microsoft.com/downloads/).
     * Make sure you install the native tools for the command prompt too.
-    
-#### Building 32-bit Natives
+
+##### Building 32-bit Natives
 
 Navigate to the `x86 Native Tools Command Prompt for VS 2019` executable. Generally you can navigate to this through
-the start menu. For Visual Studio 2019 Community the location is 
+the start menu. For Visual Studio 2019 Community the location is
 `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Visual Studio 2019\Visual Studio Tools\VC`.
 
 Once the command prompt is open make sure you set your `JAVA_HOME` to the 32-bit JDK. Then update the `INCLUDE`
@@ -121,10 +90,10 @@ set "INCLUDE=%INCLUDE%;%OPENSSL_32%\include"
 mvn clean install
 ```
 
-#### Building 64-bit Natives
+##### Building 64-bit Natives
 
 Navigate to the `x64 Native Tools Command Prompt for VS 2019` executable. Generally you can navigate to this through
-the start menu. For Visual Studio 2019 Community the location is 
+the start menu. For Visual Studio 2019 Community the location is
 `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Visual Studio 2019\Visual Studio Tools\VC`.
 
 Once the command prompt is open make sure you set your `JAVA_HOME` to the 64-bit JDK. Then update the `INCLUDE`
