@@ -307,7 +307,9 @@ WF_OPENSSL(jlong, getTime)(JNIEnv *e, jobject o, jlong ssl)
 WF_OPENSSL(void, registerSessionContext)(JNIEnv *e, jobject o, jlong ctx, jobject context) {
 #pragma comment(linker, "/EXPORT:"__FUNCTION__"="__FUNCDNAME__)
     tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
-    c->session_context = (*e)->NewGlobalRef(e, context);
+    if (!c->session_context) {
+        c->session_context = (*e)->NewGlobalRef(e, context);
+    }
 }
 
 int new_session_cb(SSL * ssl, SSL_SESSION * session) {
@@ -347,5 +349,3 @@ void setup_session_context(JNIEnv *e, tcn_ssl_ctxt_t *c) {
     ssl_methods.SSL_CTX_sess_set_new_cb(c->ctx, &new_session_cb);
     ssl_methods.SSL_CTX_sess_set_remove_cb(c->ctx, &remove_session_cb);
 }
-
-
