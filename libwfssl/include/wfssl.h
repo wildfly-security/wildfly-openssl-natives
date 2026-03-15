@@ -167,6 +167,8 @@ typedef  unsigned __int64   uint64_t;
 #define SSL_CTRL_GET_TLSEXT_TICKET_KEYS         58
 #define SSL_CTRL_SET_TLSEXT_TICKET_KEYS         59
 #define SSL_CTRL_CLEAR_OPTIONS                  77
+/* Flags specific to the nCipher "chil" engine */
+#define ENGINE_CTRL_CHIL_SET_FORKCHECK          100
 #define SSL_CTRL_SET_MIN_PROTO_VERSION          123
 #define SSL_CTRL_SET_MAX_PROTO_VERSION          124
 
@@ -359,6 +361,8 @@ typedef  unsigned __int64   uint64_t;
 #define SSL_INFO_SERVER_A_KEY               (0x0206)
 #define SSL_INFO_SERVER_CERT                (0x0207)
 #define SSL_INFO_CLIENT_CERT_CHAIN          (0x0400)
+
+#define ENGINE_METHOD_ALL                   (0xFFFF)
 
 /* Defines for BIO */
 
@@ -639,6 +643,12 @@ typedef struct {
     const EVP_MD *(*EVP_sha1)(void);
     void (*OPENSSL_add_all_algorithms_noconf)(void);
     void (*OPENSSL_load_builtin_modules)(void);
+    void (*ENGINE_register_all_complete)(void);
+    ENGINE *(*ENGINE_by_id)(const char *id);
+    int (*ENGINE_ctrl)(ENGINE *e, int cmd, long i, void *p, void (*f)(void));
+    int (*ENGINE_ctrl_cmd_string)(ENGINE *e, const char *cmd_name, const char *arg, int cmd_optional);
+    int (*ENGINE_free)(ENGINE *e);
+    int (*ENGINE_set_default)(ENGINE *e, unsigned int flags);
     EVP_PKEY *(*PEM_read_bio_PrivateKey)(BIO *bp, EVP_PKEY **x, pem_password_cb *cb, void *u);
     int (*X509_CRL_verify)(X509_CRL *a, EVP_PKEY *r);
     int (*X509_LOOKUP_ctrl)(X509_LOOKUP *ctx, int cmd, const char *argc, long argl, char **ret);

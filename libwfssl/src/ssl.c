@@ -48,7 +48,7 @@ static int SSL_CTX_app_data1_idx = -1; /* context metadata */
 
 static int OPENSSL_PROTOCOLS[6] = { SSL3_VERSION, SSL3_VERSION, TLS1_VERSION, TLS1_1_VERSION, TLS1_2_VERSION, TLS1_3_VERSION};
 
-WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstring libSSLPath);
+WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstring libSSLPath, jstring customEngine);
 WF_OPENSSL(jlong, makeSSLContext)(JNIEnv *e, jobject o, jint protocol, jint mode);
 WF_OPENSSL(jobjectArray, getCiphers)(JNIEnv *e, jobject o, jlong ssl);
 WF_OPENSSL(jboolean, setCipherSuites)(JNIEnv *e, jobject o, jlong ssl, jstring ciphers);
@@ -443,6 +443,12 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     REQUIRE_CRYPTO_SYMBOL(EVP_PKEY_type);
     REQUIRE_CRYPTO_SYMBOL(EVP_sha1);
     REQUIRE_CRYPTO_SYMBOL(OPENSSL_load_builtin_modules);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_register_all_complete);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_by_id);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_ctrl);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_ctrl_cmd_string);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_free);
+    REQUIRE_CRYPTO_SYMBOL(ENGINE_set_default);
     REQUIRE_CRYPTO_SYMBOL(PEM_read_bio_PrivateKey);
     REQUIRE_CRYPTO_SYMBOL(X509_CRL_verify);
     REQUIRE_CRYPTO_SYMBOL(X509_LOOKUP_ctrl);
@@ -487,23 +493,29 @@ int load_openssl_dynamic_methods(JNIEnv *e, const char * libCryptoPath, const ch
     return 0;
 }
 
-WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstring libSSLPath) {
+WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstring libSSLPath, jstring customEngine) {
 #pragma comment(linker, "/EXPORT:"__FUNCTION__"="__FUNCDNAME__)
     jclass clazz;
     jclass sClazz;
     const char * cPath = NULL;
     const char * sPath = NULL;
+    const char * engine = NULL;
     TCN_ALLOC_CSTRING(libCryptoPath);
     TCN_ALLOC_CSTRING(libSSLPath);
+    TCN_ALLOC_CSTRING(customEngine);
     if(libCryptoPath != NULL) {
         cPath = J2S(libCryptoPath);
     }
     if(libSSLPath != NULL) {
         sPath = J2S(libSSLPath);
     }
+    if(customEngine != NULL) {
+        engine = J2S(customEngine);
+    }
     if(load_openssl_dynamic_methods(e, cPath, sPath) != 0) {
         TCN_FREE_CSTRING(libCryptoPath);
         TCN_FREE_CSTRING(libSSLPath);
+        TCN_FREE_CSTRING(customEngine);
         return 0;
     }
     TCN_FREE_CSTRING(libCryptoPath);
@@ -511,6 +523,7 @@ WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstri
 
     /* Check if already initialized */
     if (ssl_initialized++) {
+        TCN_FREE_CSTRING(customEngine);
         return 0;
     }
     /* We must register the library in full, to ensure our configuration
@@ -534,7 +547,42 @@ WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstri
 
     ssl_thread_setup();
 
-    /* TODO: engine support? */
+    if (customEngine != NULL) {
+        if (strcmp(engine, "auto") == 0) {
+            crypto_methods.ENGINE_register_all_complete();
+        } else {
+            ENGINE *ssl_engine = crypto_methods.ENGINE_by_id(engine);
+            if (ssl_engine == NULL) {
+                ssl_engine = crypto_methods.ENGINE_by_id("dynamic");
+                if (ssl_engine) {
+                    if (!crypto_methods.ENGINE_ctrl_cmd_string(ssl_engine, "SO_PATH", engine, 0) || !crypto_methods.ENGINE_ctrl_cmd_string(ssl_engine, "LOAD", NULL, 0)) {
+                        char err[2048];
+                        crypto_methods.ENGINE_free(ssl_engine);
+                        ssl_engine = NULL;
+                        generate_openssl_stack_error(e, err, sizeof(err));
+                        tcn_Throw(e, "Could not load openssl custom engine (%s) .so library file: %s", engine, err);
+                        goto init_failed;
+                    }
+                }
+            }
+
+            if (ssl_engine) {
+                if (strcmp(engine, "chil") == 0) {
+                    crypto_methods.ENGINE_ctrl(ssl_engine, ENGINE_CTRL_CHIL_SET_FORKCHECK, 1, 0, 0);
+                }
+                if (!crypto_methods.ENGINE_set_default(ssl_engine, ENGINE_METHOD_ALL)) {
+                    char err[2048];
+                    crypto_methods.ENGINE_free(ssl_engine);
+                    ssl_engine = NULL;
+                    generate_openssl_stack_error(e, err, sizeof(err));
+                    tcn_Throw(e, "Could not set custom engine (%s) to default engine: %s", engine, err);
+                    goto init_failed;
+                }
+            }
+        }
+    }
+
+    TCN_FREE_CSTRING(customEngine);
 
     /* Cache the byte[].class for performance reasons */
     clazz = (*e)->FindClass(e, "[B");
@@ -548,6 +596,11 @@ WF_OPENSSL(jint, initialize) (JNIEnv *e, jobject o, jstring libCryptoPath, jstri
     session_init(e);
 
     return (jint)0;
+
+    init_failed:
+        ssl_initialized = 0;
+        TCN_FREE_CSTRING(customEngine);
+        return 0;
 }
 
 /* Initialize server context */
@@ -722,7 +775,7 @@ WF_OPENSSL(jobjectArray, getCiphers)(JNIEnv *e, jobject o, jlong ssl)
         return NULL;
     }
 
-    /* Create the byte[][] array that holds all the certs */
+    /* Create the byte[][] array that holds all the certs */
     array = (*e)->NewObjectArray(e, len, stringClass, NULL);
 
     for (i = 0; i < len; i++) {
